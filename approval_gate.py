@@ -16,6 +16,7 @@ from typing import Any, Protocol
 
 from agentdojo.agent_pipeline import BasePipelineElement, ToolsExecutor
 from agentdojo.functions_runtime import EmptyEnv, Env, FunctionCall, FunctionsRuntime
+from agentdojo.logging import Logger
 from agentdojo.types import ChatMessage, ChatToolResultMessage, text_content_block_from_string
 
 
@@ -117,6 +118,19 @@ class ApprovalGate(ToolsExecutor):
         self.budget.reset()
         self.records = []
         self._step = 0
+        # AgentDojo's benchmark keeps the current task in its logger context; copy the IDs so that
+        # every log line says which (user task, injection task, attack) it belongs to.
+        ctx = getattr(Logger.get(), "context", None) or {}
+        user_task_id = ctx.get("user_task_id")
+        self.task_meta.update(
+            suite=ctx.get("suite_name", self.task_meta.get("suite")),
+            user_task_id=user_task_id,
+            injection_task_id=ctx.get("injection_task_id"),
+            attack=ctx.get("attack_type", self.task_meta.get("attack")),
+            # Before the attacked runs, AgentDojo runs each injection task on its own as a sanity
+            # check. Those runs are NOT benchmark results: filter them out with is_precheck.
+            is_precheck=bool(user_task_id) and str(user_task_id).startswith("injection_task"),
+        )
         self.task_meta.update(task_meta)
 
     def _decide(self, ctx: ToolCallContext) -> tuple[Decision, Outcome, float, float]:

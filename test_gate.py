@@ -92,6 +92,25 @@ def test_log_file(tmp_path):
     rows = [json.loads(l) for l in p.read_text().splitlines()]
     assert [r["outcome"] for r in rows] == ["human_approved", "budget_exhausted_denied", "budget_exhausted_denied"]
 
+def test_log_has_task_ids(tmp_path):
+    """Inside the real benchmark, each log line carries the task / injection / attack IDs."""
+    from agentdojo.logging import NullLogger, TraceLogger
+    p = tmp_path / "gate.jsonl"
+    for user_task_id, inj in [("user_task_1", "injection_task_3"), ("injection_task_3", None)]:
+        null = NullLogger(); null.logdir = str(tmp_path / "trace")
+        with TraceLogger(delegate=null, suite_name="banking", user_task_id=user_task_id,
+                         injection_task_id=inj, injections={}, attack_type="important_instructions",
+                         pipeline_name="fake"):
+            run(FullApprovePolicy(), AlwaysApproveReviewer(), k=0, log=p)
+    rows = [json.loads(l) for l in p.read_text().splitlines()]
+    main = [r for r in rows if not r["is_precheck"]]
+    pre = [r for r in rows if r["is_precheck"]]
+    assert main and pre
+    assert all((r["suite"], r["user_task_id"], r["injection_task_id"], r["attack"]) ==
+               ("banking", "user_task_1", "injection_task_3", "important_instructions") for r in main)
+    assert all(r["user_task_id"] == "injection_task_3" and r["injection_task_id"] is None for r in pre)
+
+
 def test_gate_overhead_latency():
     xs = []
     for _ in range(200):

@@ -1,11 +1,19 @@
-"""Run the gate on the real AgentDojo benchmark (needs OPENAI_API_KEY; costs money).
+"""Run the gate on the real AgentDojo benchmark (costs money).
+
+API key (set ONE as an environment variable, never write it in a file):
+  OPENROUTER_API_KEY  -> calls go through OpenRouter
+  OPENAI_API_KEY      -> calls go directly to OpenAI
 
 Example:  python run_real.py --policy full_escalate --k 2 --suite banking --user-task user_task_1
 """
 import argparse
+import os
 from pathlib import Path
 
-from agentdojo.agent_pipeline import AgentPipeline, PipelineConfig, ToolsExecutionLoop
+import openai
+from agentdojo.agent_pipeline import (AgentPipeline, InitQuery, OpenAILLM, PipelineConfig,
+                                      SystemMessage, ToolsExecutionLoop)
+from agentdojo.agent_pipeline.agent_pipeline import load_system_message
 from agentdojo.attacks.attack_registry import load_attack
 from agentdojo.benchmark import benchmark_suite_with_injections, benchmark_suite_without_injections
 from agentdojo.logging import OutputLogger
@@ -19,13 +27,20 @@ POLICIES = {"full_approve": FullApprovePolicy, "full_escalate": FullEscalatePoli
 
 def build_pipeline(model: str, policy, reviewer, k: int, log_path: Path):
     """Standard AgentDojo pipeline, with ToolsExecutor swapped for our ApprovalGate."""
-    base = AgentPipeline.from_config(PipelineConfig(
-        llm=model, model_id=None, defense=None, system_message_name=None, system_message=None))
-    system_message, init_query, llm, _old_loop = base.elements
+    if os.getenv("OPENROUTER_API_KEY"):
+        client = openai.OpenAI(api_key=os.environ["OPENROUTER_API_KEY"], base_url="https://openrouter.ai/api/v1")
+        llm = OpenAILLM(client, model if "/" in model else f"openai/{model}")   # OpenRouter ids look like openai/gpt-...
+        system_message, init_query = SystemMessage(load_system_message(None)), InitQuery()
+        name = model.split("/")[-1]
+    else:
+        base = AgentPipeline.from_config(PipelineConfig(
+            llm=model, model_id=None, defense=None, system_message_name=None, system_message=None))
+        system_message, init_query, llm, _old_loop = base.elements
+        name = base.name
     gate = ApprovalGate(policy, reviewer, k, log_path=log_path)
     pipeline = AgentPipeline([BudgetReset(gate), system_message, init_query, llm,
                               ToolsExecutionLoop([gate, llm])])
-    pipeline.name = base.name          # attacks need the model name
+    pipeline.name = name               # attacks need the model name
     return pipeline, gate
 
 
@@ -54,5 +69,8 @@ if __name__ == "__main__":
             res = benchmark_suite_with_injections(pipeline, suite, load_attack(a.attack, suite, pipeline),
                                                   logdir, force_rerun=True, user_tasks=a.user_task)
     u, s = res["utility_results"], res["security_results"]
-    print(f"\n{tag}: utility {sum(u.values())}/{len(u)}  |  attack succeeded in {sum(s.values())}/{len(s)} runs")
+    line = f"\n{tag}: task completed (utility) {sum(u.values())}/{len(u)}"
+    if a.attack != "none":
+        line += f"  |  attack succeeded in {sum(s.values())}/{len(s)} runs"
+    print(line)
     print(f"gate log -> {logdir / 'gate_decisions.jsonl'}")
