@@ -26,7 +26,7 @@ POLICIES = ["full_approve", "full_escalate", "rules", "semantic", "rules_semanti
 REVIEWERS = ["simulated", "always_approve"]
 
 
-def make_policy(name: str, prompt_version: str = "V3"):
+def make_policy(name: str, prompt_version: str = "V1"):
     """full_approve / full_escalate: the two baselines.
     rules:          Member 3 rule prefilter; undecided calls are escalated.
     semantic:       Member 4 LLM semantic policy only.
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="gpt-4o-mini-2024-07-18")
     ap.add_argument("--policy", choices=POLICIES, default="full_escalate")
-    ap.add_argument("--prompt-version", choices=["V1", "V2", "V3"], default="V3",
+    ap.add_argument("--prompt-version", choices=["V1", "V2", "V3"], default="V1",
                     help="Member 4 prompt; only used by semantic / rules_semantic")
     ap.add_argument("--reviewer", choices=REVIEWERS, default="simulated")
     ap.add_argument("--run-id", type=int, default=0, help="repeat index (LLM output is random)")

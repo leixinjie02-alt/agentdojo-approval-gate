@@ -46,6 +46,8 @@ def test_runner_builds_every_policy(monkeypatch):
         for version in ["V1", "V2", "V3"]:
             assert hasattr(run_real.make_policy(name, version), "decide")
     assert isinstance(run_real.make_reviewer("simulated", "gpt-4o-mini-2024-07-18"), SimulatedReviewer)
+    assert run_real.make_policy('semantic').prompt_version == 'V1'
+    assert run_real.make_policy('rules_semantic').downstream_policy.prompt_version == 'V1'
 
 
 @pytest.mark.parametrize("sem, rev, k", [("auto_approve", "approve", 1), ("auto_deny", "approve", 1),

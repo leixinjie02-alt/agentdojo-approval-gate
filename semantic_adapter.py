@@ -9,7 +9,7 @@ PROMPTS = {"V1": SYSTEM_PROMPT, "V2": SYSTEM_PROMPT_V2, "V3": SYSTEM_PROMPT_V3}
 
 
 class SemanticPolicy:
-    def __init__(self, prompt_version="V3", assessor=None):
+    def __init__(self, prompt_version="V1", assessor=None):
         if prompt_version not in PROMPTS:
             raise ValueError("prompt_version must be V1, V2 or V3")
         self.prompt_version = prompt_version
