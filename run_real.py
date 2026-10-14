@@ -22,7 +22,36 @@ from agentdojo.task_suite import get_suite
 from approval_gate import (AlwaysApproveReviewer, ApprovalGate, BudgetReset,
                            FullApprovePolicy, FullEscalatePolicy)
 
-POLICIES = {"full_approve": FullApprovePolicy, "full_escalate": FullEscalatePolicy}
+POLICIES = ["full_approve", "full_escalate", "rules", "semantic", "rules_semantic"]
+REVIEWERS = ["simulated", "always_approve"]
+
+
+def make_policy(name: str, prompt_version: str = "V3"):
+    """full_approve / full_escalate: the two baselines.
+    rules:          Member 3 rule prefilter; undecided calls are escalated.
+    semantic:       Member 4 LLM semantic policy only.
+    rules_semantic: Member 3 rules first; undecided calls go to Member 4's semantic policy."""
+    if name == "full_approve":
+        return FullApprovePolicy()
+    if name == "full_escalate":
+        return FullEscalatePolicy()
+    from prefilter_policy import PrefilterPolicy      # imported lazily: baselines need no extra files
+    from rule_prefilter import RulePreFilter
+    if name == "rules":
+        return PrefilterPolicy(RulePreFilter(), FullEscalatePolicy())
+    from semantic_adapter import SemanticPolicy
+    if name == "semantic":
+        return SemanticPolicy(prompt_version=prompt_version)
+    if name == "rules_semantic":
+        return PrefilterPolicy(RulePreFilter(), SemanticPolicy(prompt_version=prompt_version))
+    raise ValueError(name)
+
+
+def make_reviewer(name: str, model: str):
+    if name == "simulated":                            # Member 2's LLM-simulated human reviewer
+        from simulated_reviewer import SimulatedReviewer
+        return SimulatedReviewer(model=model)
+    return AlwaysApproveReviewer()                     # placeholder only; not valid for security claims
 
 
 def build_pipeline(model: str, policy, reviewer, k: int, log_path: Path):
@@ -48,6 +77,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="gpt-4o-mini-2024-07-18")
     ap.add_argument("--policy", choices=POLICIES, default="full_escalate")
+    ap.add_argument("--prompt-version", choices=["V1", "V2", "V3"], default="V3",
+                    help="Member 4 prompt; only used by semantic / rules_semantic")
+    ap.add_argument("--reviewer", choices=REVIEWERS, default="simulated")
+    ap.add_argument("--run-id", type=int, default=0, help="repeat index (LLM output is random)")
     ap.add_argument("--k", type=int, default=2)
     ap.add_argument("--suite", default="banking")
     ap.add_argument("--user-task", action="append", help="e.g. user_task_1 (repeatable); default = all")
@@ -55,11 +88,13 @@ if __name__ == "__main__":
     ap.add_argument("--logdir", default="runs")
     a = ap.parse_args()
 
-    tag = f"{a.policy}_k{a.k}"
+    uses_prompt = a.policy in ("semantic", "rules_semantic")
+    tag = f"{a.policy}{'_' + a.prompt_version if uses_prompt else ''}_{a.reviewer}_k{a.k}_run{a.run_id}"
     logdir = Path(a.logdir) / tag
-    pipeline, gate = build_pipeline(a.model, POLICIES[a.policy](), AlwaysApproveReviewer(), a.k,
-                                    logdir / "gate_decisions.jsonl")
-    gate.task_meta.update(policy=a.policy, suite=a.suite, attack=a.attack)
+    pipeline, gate = build_pipeline(a.model, make_policy(a.policy, a.prompt_version),
+                                    make_reviewer(a.reviewer, a.model), a.k, logdir / "gate_decisions.jsonl")
+    gate.task_meta.update(policy=a.policy, prompt_version=a.prompt_version if uses_prompt else None,
+                          reviewer=a.reviewer, run_id=a.run_id, suite=a.suite, attack=a.attack)
     suite = get_suite("v1.2", a.suite)
     with OutputLogger(str(logdir)):
         if a.attack == "none":
