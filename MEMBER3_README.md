@@ -14,6 +14,8 @@ denies explicitly prohibited tools, and defers other calls.
 - `prefilter_policy.py`: Adapter compatible with the approval gate.
 - `test_rule_prefilter.py`: Rule and permission boundary tests.
 - `test_prefilter_policy.py`: Offline AgentDojo integration tests.
+- `calendar_rules.py`: Recognizes supported explicit calendar queries.
+- `test_calendar_rules.py`: Date parsing and request boundary tests.
 
 ## Implemented Rules
 
@@ -23,7 +25,13 @@ denies explicitly prohibited tools, and defers other calls.
    - The metadata identifies it as a read-only tool.
    - The arguments contain exactly one string-valued `file_id`.
    - That file ID is approved for the original user request.
-4. Defer all other calls to the downstream policy.
+4. Approve `get_day_calendar_events` only when:
+   - The original request matches a supported explicit calendar query.
+   - The arguments contain exactly one string-valued `day`.
+   - The supplied day matches the date in the original request.
+5. Defer all other calls to the downstream policy.
+
+Complex calendar requests and relative dates remain deferred.
 
 File-read permission does not authorize sharing or deleting the file.
 Permissions must not come from attack content or benchmark oracle labels.
@@ -57,11 +65,12 @@ prefilter and downstream policy.
 ## Validation
 
 ```bash
-python -m pytest test_tool_metadata.py test_rule_prefilter.py test_prefilter_policy.py -v
+python -m pytest test_calendar_rules.py test_tool_metadata.py test_rule_prefilter.py test_prefilter_policy.py -v
 ```
 
-The current validation includes 17 rule cases, two integration
-scenarios, and two metadata checks: 21 tests in total.
+The current validation includes 27 rule cases, 11 calendar-parser
+cases, two integration scenarios, and two metadata checks:
+42 tests in total.
 
 Metadata is verified against AgentDojo 0.1.35 Workspace implementations.
 In particular, `get_unread_emails` changes email read flags and is
@@ -69,35 +78,37 @@ therefore not classified as read-only.
 
 ## Initial Reference Coverage
 
+## Reference Coverage
+
 Run the offline diagnostic with:
 
 ```bash
 python evaluate_reference_coverage.py
 ```
 
-The report is saved to `member3_reference_coverage.json`.
+The current report is saved to `member3_reference_coverage.json`.
 
-Using AgentDojo 0.1.35 and the default prefilter configuration,
-with no blocked tools or preapproved file permissions:
+Both versions use AgentDojo 0.1.35 with no blocked tools or
+preapproved file permissions.
 
-| Suite | Reference Calls | Directly Handled | Coverage |
+| Suite | Reference Calls | Initial Coverage | Current Coverage |
 |---|---:|---:|---:|
-| Banking | 33 | 0 | 0.00% |
-| Slack | 98 | 0 | 0.00% |
-| Travel | 124 | 0 | 0.00% |
-| Workspace | 84 | 2 | 2.38% |
-| Total | 339 | 2 | 0.59% |
+| Banking | 33 | 0.00% | 0.00% |
+| Slack | 98 | 0.00% | 0.00% |
+| Travel | 124 | 0.00% | 0.00% |
+| Workspace | 84 | 2.38% | 3.57% |
+| Total | 339 | 0.59% | 0.88% |
 
-The two directly handled calls used `get_current_day`.
-The remaining 337 calls were deferred.
+The initial version directly handled two calls.
+The current version directly handles three calls and defers 336.
+The additional handled call uses the scoped calendar-day rule.
 
 These results describe offline reference-call fixtures without
 tool execution or conversation history. They do not measure
 live-agent coverage, safety accuracy, or TCR.
 
-The initial rules have limited coverage. Further work should
-expand supported tools while preserving authorization checks.
-Local timing measurements are included in the JSON report.
+Coverage remains limited. Local diagnostic timing measurements
+are included in the JSON report.
 
 ## Remaining Work
 

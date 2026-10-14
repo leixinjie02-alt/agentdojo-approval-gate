@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from approval_gate import Decision, ToolCallContext
+from calendar_rules import calendar_query_day
 from tool_metadata import TOOL_METADATA
 
 
@@ -45,6 +46,22 @@ class RulePreFilter:
                     rule_id="safe_current_day",
                     reason="Reads the current date without modifying or sending data.",
                 )
+
+            if ctx.tool_name == "get_day_calendar_events":
+                expected_day = calendar_query_day(ctx.task_description)
+                day = ctx.tool_args.get("day")
+
+                if (
+                    set(ctx.tool_args) == {"day"}
+                    and isinstance(day, str)
+                    and expected_day is not None
+                    and day == expected_day
+                ):
+                    return RuleResult(
+                        decision=Decision.APPROVE,
+                        rule_id="authorized_calendar_day",
+                        reason="Reads calendar events for the explicitly requested date.",
+                    )
 
             if ctx.tool_name == "get_file_by_id":
                 approved_ids = self.approved_file_ids_by_task.get(

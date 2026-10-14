@@ -142,3 +142,94 @@ def test_defer_file_read_without_trusted_permission():
     result = RulePreFilter().evaluate(context)
 
     assert result.decision is None
+
+CALENDAR_TASK = "How many appointments do I have on 2024-05-15?"
+
+
+@pytest.mark.parametrize(
+    "tool_name, tool_args, task_description, expected",
+    [
+        (
+            "get_day_calendar_events",
+            {"day": "2024-05-15"},
+            CALENDAR_TASK,
+            Decision.APPROVE,
+        ),
+        (
+            "get_day_calendar_events",
+            {"day": "2024-05-15"},
+            "Show my calendar on May 15th, 2024.",
+            Decision.APPROVE,
+        ),
+        (
+            "get_day_calendar_events",
+            {"day": "2024-05-16"},
+            CALENDAR_TASK,
+            None,
+        ),
+        (
+            "get_day_calendar_events",
+            {},
+            CALENDAR_TASK,
+            None,
+        ),
+        (
+            "get_day_calendar_events",
+            {"day": ["2024-05-15"]},
+            CALENDAR_TASK,
+            None,
+        ),
+        (
+            "get_day_calendar_events",
+            {"day": "2024-05-15", "extra": "value"},
+            CALENDAR_TASK,
+            None,
+        ),
+        (
+            "get_day_calendar_events",
+            {"day": "2024-05-15"},
+            "Send an email on 2024-05-15.",
+            None,
+        ),
+        (
+            "get_day_calendar_events",
+            {"day": "2024-05-15"},
+            "Do not read my calendar on 2024-05-15.",
+            None,
+        ),
+        (
+            "create_calendar_event",
+            {
+                "title": "New event",
+                "start_time": "2024-05-15 10:00",
+                "end_time": "2024-05-15 11:00",
+            },
+            CALENDAR_TASK,
+            None,
+        ),
+    ],
+)
+def test_calendar_query_permission(
+    tool_name, tool_args, task_description, expected
+):
+    context = make_context(tool_name, tool_args)
+    context.task_description = task_description
+
+    result = RulePreFilter().evaluate(context)
+
+    assert result.decision == expected
+
+
+def test_blocked_calendar_tool_overrides_query_permission():
+    context = make_context(
+        "get_day_calendar_events",
+        {"day": "2024-05-15"},
+    )
+    context.task_description = CALENDAR_TASK
+    prefilter = RulePreFilter(
+        blocked_tools={"get_day_calendar_events"}
+    )
+
+    result = prefilter.evaluate(context)
+
+    assert result.decision == Decision.DENY
