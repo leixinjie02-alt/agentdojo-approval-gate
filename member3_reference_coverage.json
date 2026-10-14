@@ -1,0 +1,59 @@
+{
+  "evaluation_type": "offline_reference_call_coverage",
+  "agentdojo_version": "0.1.35",
+  "configuration": "Default prefilter; no preapproved file permissions.",
+  "limitations": "Reference calls are evaluated without execution or history. This is not live-agent coverage, safety accuracy, or TCR.",
+  "total_reference_calls": 339,
+  "total_covered_calls": 3,
+  "overall_coverage_percent": 0.88,
+  "suites": [
+    {
+      "suite": "banking",
+      "reference_tasks": 16,
+      "reference_calls": 33,
+      "decisions": {
+        "approve": 0,
+        "deny": 0,
+        "defer": 33
+      },
+      "coverage_percent": 0.0,
+      "mean_rule_latency_ms": 0.0007
+    },
+    {
+      "suite": "slack",
+      "reference_tasks": 21,
+      "reference_calls": 98,
+      "decisions": {
+        "approve": 0,
+        "deny": 0,
+        "defer": 98
+      },
+      "coverage_percent": 0.0,
+      "mean_rule_latency_ms": 0.000285
+    },
+    {
+      "suite": "travel",
+      "reference_tasks": 20,
+      "reference_calls": 124,
+      "decisions": {
+        "approve": 0,
+        "deny": 0,
+        "defer": 124
+      },
+      "coverage_percent": 0.0,
+      "mean_rule_latency_ms": 0.000326
+    },
+    {
+      "suite": "workspace",
+      "reference_tasks": 40,
+      "reference_calls": 84,
+      "decisions": {
+        "approve": 3,
+        "deny": 0,
+        "defer": 81
+      },
+      "coverage_percent": 3.57,
+      "mean_rule_latency_ms": 0.001835
+    }
+  ]
+}
