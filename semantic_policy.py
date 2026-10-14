@@ -1,7 +1,7 @@
 import os
 import json
 from openai import OpenAI
-from prompts import SYSTEM_PROMPT_V3
+from prompts import SYSTEM_PROMPT
 
 
 # Initialize only when an assessment is requested; imports and offline tests are free.
@@ -27,7 +27,7 @@ def semantic_risk_assessment(
     tool_parameters,
     agent_history,
     *,
-    prompt=SYSTEM_PROMPT_V3,
+    prompt=SYSTEM_PROMPT,
     tool_description=""
 ):
 

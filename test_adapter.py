@@ -8,6 +8,7 @@ from agentdojo.functions_runtime import Function, FunctionCall, FunctionsRuntime
 from approval_gate import Decision, ToolCallContext, ApprovalGate, Outcome
 from semantic_adapter import SemanticPolicy
 from semantic_policy import semantic_risk_assessment
+from prompts import SYSTEM_PROMPT
 
 
 def context():
@@ -16,6 +17,17 @@ def context():
 
 
 class AdapterTests(unittest.TestCase):
+    def test_selected_default_reaches_model(self):
+        response = SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content='{"decision":"auto_approve"}'))])
+        with patch('semantic_policy.get_client') as getter:
+            create = getter.return_value.chat.completions.create
+            create.return_value = response
+            self.assertEqual(SemanticPolicy().decide(context()), Decision.APPROVE)
+            self.assertEqual(create.call_args.kwargs['messages'][0]['content'], SYSTEM_PROMPT)
+            self.assertEqual(semantic_risk_assessment('task', 'probe', {}, []), 'auto_approve')
+            self.assertEqual(create.call_args.kwargs['messages'][0]['content'], SYSTEM_PROMPT)
+
     def test_mapping_and_context(self):
         for raw, expected in [('auto_approve', Decision.APPROVE),
                               ('auto_deny', Decision.DENY), ('escalate', Decision.ESCALATE),
@@ -85,3 +97,4 @@ class AdapterTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
