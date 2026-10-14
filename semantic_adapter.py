@@ -1,6 +1,7 @@
 """Member 4 policy compatible with Member 1's ApprovalGate."""
 import json
 from approval_gate import Decision, ToolCallContext
+import semantic_policy
 from semantic_policy import semantic_risk_assessment
 from prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_V2, SYSTEM_PROMPT_V3
 
@@ -8,13 +9,15 @@ PROMPTS = {"V1": SYSTEM_PROMPT, "V2": SYSTEM_PROMPT_V2, "V3": SYSTEM_PROMPT_V3}
 
 
 class SemanticPolicy:
-    def __init__(self, prompt_version="V1", assessor=None):
+    def __init__(self, prompt_version="V3", assessor=None):
         if prompt_version not in PROMPTS:
             raise ValueError("prompt_version must be V1, V2 or V3")
         self.prompt_version = prompt_version
         self.assessor = assessor or semantic_risk_assessment
+        self.last_usage = {}   # tokens of the most recent decide(); read by Member 1's gate
 
     def decide(self, ctx: ToolCallContext) -> Decision:
+        self.last_usage = {}
         try:
             result = self.assessor(
                 user_task=ctx.task_description,
@@ -25,10 +28,11 @@ class SemanticPolicy:
                 tool_description=ctx.tool_description,
                 prompt=PROMPTS[self.prompt_version],
             )
+            if self.assessor is semantic_risk_assessment:
+                self.last_usage = dict(semantic_policy.LAST_USAGE)
             return {"auto_approve": Decision.APPROVE,
                     "auto_deny": Decision.DENY,
                     "escalate": Decision.ESCALATE}.get(result, Decision.ESCALATE)
         except Exception:
             # Failed assessments never authorize execution.
             return Decision.ESCALATE
-

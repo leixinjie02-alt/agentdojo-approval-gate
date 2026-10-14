@@ -94,6 +94,42 @@ class GateRecord:
     policy_latency_ms: float
     reviewer_latency_ms: float
     gate_overhead_ms: float  # gate bookkeeping only, excluding policy/reviewer/tool time
+    # LLM tokens spent on THIS tool call (0 when the component did not call an LLM)
+    policy_prompt_tokens: int = 0
+    policy_completion_tokens: int = 0
+    reviewer_prompt_tokens: int = 0
+    reviewer_completion_tokens: int = 0
+
+
+# ---------------------------------------------------------- token accounting
+def _components(obj: Any) -> list[Any]:
+    """The object plus any policy it wraps (e.g. Member 3's PrefilterPolicy.downstream_policy)."""
+    out: list[Any] = []
+    while obj is not None and all(obj is not o for o in out):
+        out.append(obj)
+        obj = getattr(obj, "downstream_policy", None)
+    return out
+
+
+def _clear_usage(obj: Any) -> None:
+    for o in _components(obj):
+        if hasattr(o, "last_usage"):
+            o.last_usage = {}
+
+
+def _read_usage(obj: Any) -> tuple[int, int]:
+    """Components report usage through a `last_usage` dict with prompt_tokens / completion_tokens."""
+    p = c = 0
+    for o in _components(obj):
+        u = getattr(o, "last_usage", None) or {}
+        p += int(u.get("prompt_tokens") or 0)
+        c += int(u.get("completion_tokens") or 0)
+    return p, c
+
+
+def _new_usage() -> dict[str, dict[str, int]]:
+    return {role: {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
+            for role in ("agent", "policy", "reviewer")}
 
 
 # ------------------------------------------------------------------ the gate
@@ -112,9 +148,15 @@ class ApprovalGate(ToolsExecutor):
         self.records: list[GateRecord] = []   # records of the CURRENT task
         self.task_meta: dict[str, Any] = {}
         self._step = 0
+        self.usage = _new_usage()              # token totals of the CURRENT task
+        self._task_open = False
 
     # called once at the start of every task (by BudgetReset below)
     def start_task(self, **task_meta: Any) -> None:
+        if self._task_open:                    # previous task ended abnormally (e.g. API error)
+            self.end_task(completed=False)
+        self._task_open = True
+        self.usage = _new_usage()
         self.budget.reset()
         self.records = []
         self._step = 0
@@ -133,7 +175,34 @@ class ApprovalGate(ToolsExecutor):
         )
         self.task_meta.update(task_meta)
 
+    def add_agent_usage(self, prompt_tokens: int, completion_tokens: int) -> None:
+        """Called by run_real.py for every LLM call the AGENT makes."""
+        u = self.usage["agent"]
+        u["prompt_tokens"] += prompt_tokens
+        u["completion_tokens"] += completion_tokens
+        u["calls"] += 1
+
+    def end_task(self, completed: bool = True) -> None:
+        """Write one per-task summary line (task_summaries.jsonl, next to the decision log)."""
+        if not self._task_open:
+            return
+        self._task_open = False
+        if not self.log_path:
+            return
+        outcomes = [r.outcome for r in self.records]
+        row = {**self.task_meta, "k": self.budget.k, "pipeline_completed": completed,
+               "n_tool_calls": len(self.records),
+               "n_escalations": sum(o in ("human_approved", "human_denied") for o in outcomes),
+               "n_budget_exhausted_denied": outcomes.count("budget_exhausted_denied"),
+               "usage": self.usage}
+        path = self.log_path.with_name("task_summaries.jsonl")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as f:
+            f.write(json.dumps(row, default=str) + "\n")
+
     def _decide(self, ctx: ToolCallContext) -> tuple[Decision, Outcome, float, float]:
+        _clear_usage(self.policy)
+        _clear_usage(self.reviewer)
         t0 = time.perf_counter()
         decision = Decision(self.policy.decide(ctx))
         policy_ms = (time.perf_counter() - t0) * 1000
@@ -187,12 +256,21 @@ class ApprovalGate(ToolsExecutor):
                     tool_call_id=tool_call.id, tool_call=tool_call, error=self.DENY_MSG))
 
             total_ms = (time.perf_counter() - t_start) * 1000
+            pol_p, pol_c = _read_usage(self.policy)
+            rev_p, rev_c = _read_usage(self.reviewer) if reviewer_ms else (0, 0)
+            for role, (pt, ct) in (("policy", (pol_p, pol_c)), ("reviewer", (rev_p, rev_c))):
+                if pt or ct:
+                    self.usage[role]["prompt_tokens"] += pt
+                    self.usage[role]["completion_tokens"] += ct
+                    self.usage[role]["calls"] += 1
             self._write(GateRecord(
                 step_index=self._step, tool_name=tool_call.function, tool_args=dict(tool_call.args),
                 policy_decision=decision.value, outcome=outcome.value, executed=executed,
                 budget_before=budget_before, budget_after=self.budget.remaining,
                 policy_latency_ms=round(policy_ms, 3), reviewer_latency_ms=round(reviewer_ms, 3),
-                gate_overhead_ms=round(total_ms - policy_ms - reviewer_ms - exec_ms, 3)))
+                gate_overhead_ms=round(total_ms - policy_ms - reviewer_ms - exec_ms, 3),
+                policy_prompt_tokens=pol_p, policy_completion_tokens=pol_c,
+                reviewer_prompt_tokens=rev_p, reviewer_completion_tokens=rev_c))
             self._step += 1
         return query, runtime, env, [*messages, *results], extra_args
 
@@ -202,6 +280,17 @@ class ApprovalGate(ToolsExecutor):
             self.log_path.parent.mkdir(parents=True, exist_ok=True)
             with self.log_path.open("a") as f:
                 f.write(json.dumps({**self.task_meta, "k": self.budget.k, **asdict(rec)}, default=str) + "\n")
+
+
+class TaskEnd(BasePipelineElement):
+    """Put this at the END of the pipeline: writes the per-task summary (incl. token usage)."""
+
+    def __init__(self, gate: ApprovalGate) -> None:
+        self.gate = gate
+
+    def query(self, query, runtime, env=EmptyEnv(), messages=[], extra_args={}):
+        self.gate.end_task()
+        return query, runtime, env, messages, extra_args
 
 
 class BudgetReset(BasePipelineElement):

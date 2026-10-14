@@ -1,12 +1,17 @@
-import os
 import json
+import logging
+import os
 from openai import OpenAI
-from prompts import SYSTEM_PROMPT
+from prompts import SYSTEM_PROMPT_V3
 
 
 # Initialize only when an assessment is requested; imports and offline tests are free.
 client = None
 MODEL = "openai/gpt-4o-mini"
+
+# Token usage of the most recent assessment, read by SemanticPolicy for cost accounting.
+LAST_USAGE = {}
+log = logging.getLogger(__name__)
 
 
 def get_client():
@@ -27,7 +32,7 @@ def semantic_risk_assessment(
     tool_parameters,
     agent_history,
     *,
-    prompt=SYSTEM_PROMPT,
+    prompt=SYSTEM_PROMPT_V3,
     tool_description=""
 ):
 
@@ -40,6 +45,8 @@ def semantic_risk_assessment(
         "tool_description": tool_description
     }
 
+    global LAST_USAGE
+    LAST_USAGE = {}
     try:
         # 3. Call the LLM
         response = get_client().chat.completions.create(
@@ -58,8 +65,15 @@ def semantic_risk_assessment(
                 }
             ],
             temperature=0,
-            max_tokens=300
+            max_tokens=300,
+            # Force a JSON object so a formatting slip does not silently become "escalate".
+            response_format={"type": "json_object"},
         )
+
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            LAST_USAGE = {"prompt_tokens": usage.prompt_tokens,
+                          "completion_tokens": usage.completion_tokens}
 
         # 4. Parse the LLM response
         content = response.choices[0].message.content
@@ -79,14 +93,13 @@ def semantic_risk_assessment(
         ]
 
         if decision not in valid_decisions:
-            print("Invalid LLM decision.")
+            log.warning("Invalid LLM decision: %r", decision)
             return "escalate"
 
         return decision
 
     except Exception as e:
-        print("LLM assessment failed:", type(e).__name__)
-        print("Fallback decision: escalate")
+        log.warning("LLM assessment failed (%s); fallback decision: escalate", type(e).__name__)
         return "escalate"
 
 

@@ -19,14 +19,14 @@ from agentdojo.benchmark import benchmark_suite_with_injections, benchmark_suite
 from agentdojo.logging import OutputLogger
 from agentdojo.task_suite import get_suite
 
-from approval_gate import (AlwaysApproveReviewer, ApprovalGate, BudgetReset,
+from approval_gate import (AlwaysApproveReviewer, ApprovalGate, BudgetReset, TaskEnd,
                            FullApprovePolicy, FullEscalatePolicy)
 
 POLICIES = ["full_approve", "full_escalate", "rules", "semantic", "rules_semantic"]
 REVIEWERS = ["simulated", "always_approve"]
 
 
-def make_policy(name: str, prompt_version: str = "V1"):
+def make_policy(name: str, prompt_version: str = "V3"):
     """full_approve / full_escalate: the two baselines.
     rules:          Member 3 rule prefilter; undecided calls are escalated.
     semantic:       Member 4 LLM semantic policy only.
@@ -54,6 +54,25 @@ def make_reviewer(name: str, model: str):
     return AlwaysApproveReviewer()                     # placeholder only; not valid for security claims
 
 
+class UsageCountingClient:
+    """Wraps the agent's OpenAI client and reports every completion's token usage to the gate."""
+
+    def __init__(self, client, on_usage):
+        self._client, self._on_usage = client, on_usage
+        self.chat = self
+        self.completions = self
+
+    def create(self, *args, **kwargs):
+        resp = self._client.chat.completions.create(*args, **kwargs)
+        u = getattr(resp, "usage", None)
+        if u is not None:
+            self._on_usage(u.prompt_tokens or 0, u.completion_tokens or 0)
+        return resp
+
+    def __getattr__(self, name):
+        return getattr(self._client, name)
+
+
 def build_pipeline(model: str, policy, reviewer, k: int, log_path: Path):
     """Standard AgentDojo pipeline, with ToolsExecutor swapped for our ApprovalGate."""
     if os.getenv("OPENROUTER_API_KEY"):
@@ -67,8 +86,9 @@ def build_pipeline(model: str, policy, reviewer, k: int, log_path: Path):
         system_message, init_query, llm, _old_loop = base.elements
         name = base.name
     gate = ApprovalGate(policy, reviewer, k, log_path=log_path)
+    llm.client = UsageCountingClient(llm.client, gate.add_agent_usage)   # agent token accounting
     pipeline = AgentPipeline([BudgetReset(gate), system_message, init_query, llm,
-                              ToolsExecutionLoop([gate, llm])])
+                              ToolsExecutionLoop([gate, llm]), TaskEnd(gate)])
     pipeline.name = name               # attacks need the model name
     return pipeline, gate
 
@@ -77,7 +97,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="gpt-4o-mini-2024-07-18")
     ap.add_argument("--policy", choices=POLICIES, default="full_escalate")
-    ap.add_argument("--prompt-version", choices=["V1", "V2", "V3"], default="V1",
+    ap.add_argument("--prompt-version", choices=["V1", "V2", "V3"], default="V3",
                     help="Member 4 prompt; only used by semantic / rules_semantic")
     ap.add_argument("--reviewer", choices=REVIEWERS, default="simulated")
     ap.add_argument("--run-id", type=int, default=0, help="repeat index (LLM output is random)")
@@ -89,7 +109,8 @@ if __name__ == "__main__":
     a = ap.parse_args()
 
     uses_prompt = a.policy in ("semantic", "rules_semantic")
-    tag = f"{a.policy}{'_' + a.prompt_version if uses_prompt else ''}_{a.reviewer}_k{a.k}_run{a.run_id}"
+    tag = (f"{a.suite}_{a.attack}_{a.policy}{'_' + a.prompt_version if uses_prompt else ''}"
+           f"_{a.reviewer}_k{a.k}_run{a.run_id}")
     logdir = Path(a.logdir) / tag
     pipeline, gate = build_pipeline(a.model, make_policy(a.policy, a.prompt_version),
                                     make_reviewer(a.reviewer, a.model), a.k, logdir / "gate_decisions.jsonl")
@@ -109,4 +130,4 @@ if __name__ == "__main__":
         line += f"  |  attack succeeded in {sum(s.values())}/{len(s)} runs"
     print(line)
     print(f"gate log -> {logdir / 'gate_decisions.jsonl'}")
-
+    print(f"per-task summaries (tokens, escalations) -> {logdir / 'task_summaries.jsonl'}")
