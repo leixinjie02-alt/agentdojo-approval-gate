@@ -8,7 +8,8 @@ denies explicitly prohibited tools, and defers other calls.
 
 ## Files
 
-- `tool_metadata.py`: Trusted metadata for selected Workspace tools.
+- `tool_metadata.py`: Trusted metadata for all 24 Workspace tools.
+- `test_tool_metadata.py`: Registry coverage and read-state mutation checks.
 - `rule_prefilter.py`: Rule evaluation and task-scoped permissions.
 - `prefilter_policy.py`: Adapter compatible with the approval gate.
 - `test_rule_prefilter.py`: Rule and permission boundary tests.
@@ -56,15 +57,15 @@ prefilter and downstream policy.
 ## Validation
 
 ```bash
-python -m pytest test_rule_prefilter.py -v
-python -m pytest test_prefilter_policy.py -v
+python -m pytest test_tool_metadata.py test_rule_prefilter.py test_prefilter_policy.py -v
 ```
 
-The current tests cover 17 rule cases and two integration scenarios.
+The current validation includes 17 rule cases, two integration
+scenarios, and two metadata checks: 21 tests in total.
 
-Integration tests replay scripted tool calls and reviewer responses
-inside AgentDojo. They do not invoke a real language model or measure
-benchmark task completion.
+Metadata is verified against AgentDojo 0.1.35 Workspace implementations.
+In particular, `get_unread_emails` changes email read flags and is
+therefore not classified as read-only.
 
 ## Initial Reference Coverage
 
