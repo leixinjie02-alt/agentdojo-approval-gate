@@ -1,0 +1,11 @@
+{
+  "source_archive": "m4_live_run_data.zip",
+  "source_sha256": "d6fc96afcd0c34c72e35b882d2b8733bf44f0df8785df3d87123eec47e3cf312",
+  "original_files": 17,
+  "original_gate_records": 176,
+  "excluded_prechecks": 112,
+  "retained_main_records": 64,
+  "retained_traces": 14,
+  "extraction": "Gate records joined in original row order to decisions_summary.csv after validating tool_name, policy_decision and outcome. Excluded is_precheck=true. Task results extracted from all 14 trace JSON files. Removed tool arguments, messages and injection payloads; no raw results altered. decided_by/read_only are supplied CSV classifications, not independent ground truth. security is attack success per source README and CSV.",
+  "repository_base": "fbaf9fbba4a62efd51ff4ad52b2028d6c41905b1"
+}
