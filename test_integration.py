@@ -157,3 +157,56 @@ def test_cost_report_uses_member5_tracker(tmp_path):
     assert tracker.usage["reviewer"] == {"prompt_tokens": 100, "completion_tokens": 10, "calls": 1}
     cost = tracker.calculate_cost("gpt-4o-mini")
     assert abs(cost["total_cost_usd"] - (3400 * 0.15 + 140 * 0.60) / 1e6) < 1e-9
+
+
+def test_log_join_keys_and_reasons(tmp_path, monkeypatch):
+    """Each log row carries the model's tool_call_id, its position in the trace, a task_id shared with
+    task_summaries.jsonl, and the reasons behind the decision (rule / semantic / reviewer / budget)."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "offline-test")
+    import semantic_policy
+    from agentdojo.task_suite import get_suite
+
+    def completion(content=None, tool_calls=None):
+        msg = SimpleNamespace(content=content, tool_calls=tool_calls, role="assistant")
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)],
+                               usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, total_tokens=2))
+
+    pol = completion('{"decision": "escalate", "reason": "sends data outside"}')
+    monkeypatch.setattr(semantic_policy, "get_client", lambda: SimpleNamespace(chat=SimpleNamespace(
+        completions=SimpleNamespace(create=lambda **kw: pol))))
+    rev_client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kw: completion('{"decision": "deny", "reason": "not requested by user"}'))))
+
+    log = tmp_path / "gate_decisions.jsonl"
+    pipeline, gate = run_real.build_pipeline("gpt-4o-mini-2024-07-18", run_real.make_policy("rules_semantic"),
+                                             SimulatedReviewer(client=rev_client), 1, log)
+    gate.task_meta.update(suite="workspace", run_id=3)
+
+    def tc(i, name, args="{}"):
+        return SimpleNamespace(id=f"call_{i}", type="function", function=SimpleNamespace(name=name, arguments=args))
+    # turn 1: two calls in one message (rule-approved + escalated); turn 2: one more escalation (budget gone)
+    answers = iter([completion(None, [tc("a", "get_current_day"), tc("b", "search_emails", '{"query": "x"}')]),
+                    completion(None, [tc("c", "search_emails", '{"query": "y"}')]),
+                    completion("done")])
+    pipeline.elements[3].client._client = SimpleNamespace(chat=SimpleNamespace(
+        completions=SimpleNamespace(create=lambda **kw: next(answers))))
+    suite = get_suite("v1.2", "workspace")
+    env = suite.load_and_inject_default_environment({})
+    _, _, _, msgs, _ = pipeline.query("What day is it?", FunctionsRuntime(suite.tools), env)
+
+    rows = [json.loads(l) for l in log.read_text().splitlines()]
+    assert [r["tool_call_id"] for r in rows] == ["call_a", "call_b", "call_c"]
+    assert [r["step_index"] for r in rows] == [0, 1, 2]
+    for r in rows:                                  # message_index points at the assistant message with this id
+        m = msgs[r["message_index"]]
+        assert m["role"] == "assistant" and r["tool_call_id"] in [t.id for t in m["tool_calls"]]
+    a, b, c = rows
+    assert a["decided_by"] == "rule:safe_current_day" and a["outcome"] == "auto_approved" and a["final_reason"]
+    assert b["decided_by"] == "semantic" and b["policy_reason"] == "sends data outside"
+    assert b["outcome"] == "human_denied" and b["reviewer_reason"] == "not requested by user"
+    assert b["final_reason"] == "not requested by user"
+    assert (b["budget_before"], b["budget_after"]) == (1, 0)
+    assert c["outcome"] == "budget_exhausted_denied" and c["reviewer_reason"] == ""
+    assert c["final_reason"] == "escalation budget k=1 exhausted"
+    summ = json.loads((tmp_path / "task_summaries.jsonl").read_text().splitlines()[0])
+    assert {r["task_id"] for r in rows} == {summ["task_id"]} == {"workspace/None/none/run3"}

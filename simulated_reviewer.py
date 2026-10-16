@@ -48,6 +48,7 @@ class SimulatedReviewer:
     ):
         self.model = model
         self.last_usage = {}
+        self.last_reason = ""   # reviewer's stated reason, logged by Member 1's gate
 
         if client is not None:
             self.client = client
@@ -111,9 +112,11 @@ class SimulatedReviewer:
                 response.choices[0].message.content or "{}"
             )
             decision = str(result.get("decision", "")).lower().strip()
+            self.last_reason = str(result.get("reason", ""))
 
             return decision == "approve"
 
         except Exception as error:
             print(f"Reviewer error: {error}")
+            self.last_reason = f"reviewer error ({type(error).__name__}); denied"
             return False

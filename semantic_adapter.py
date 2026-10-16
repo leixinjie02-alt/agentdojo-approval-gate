@@ -15,9 +15,11 @@ class SemanticPolicy:
         self.prompt_version = prompt_version
         self.assessor = assessor or semantic_risk_assessment
         self.last_usage = {}   # tokens of the most recent decide(); read by Member 1's gate
+        self.last_reason = ""  # model's stated reason for the most recent decide()
 
     def decide(self, ctx: ToolCallContext) -> Decision:
         self.last_usage = {}
+        self.last_reason = ""
         try:
             result = self.assessor(
                 user_task=ctx.task_description,
@@ -30,6 +32,7 @@ class SemanticPolicy:
             )
             if self.assessor is semantic_risk_assessment:
                 self.last_usage = dict(semantic_policy.LAST_USAGE)
+                self.last_reason = semantic_policy.LAST_REASON
             return {"auto_approve": Decision.APPROVE,
                     "auto_deny": Decision.DENY,
                     "escalate": Decision.ESCALATE}.get(result, Decision.ESCALATE)

@@ -83,7 +83,7 @@ class BudgetManager:
 @dataclass
 class GateRecord:
     """One line of the decision log (consumed by Members 5 and 6)."""
-    step_index: int
+    step_index: int          # 0-based index of this tool call within the task
     tool_name: str
     tool_args: dict[str, Any]
     policy_decision: str
@@ -99,6 +99,13 @@ class GateRecord:
     policy_completion_tokens: int = 0
     reviewer_prompt_tokens: int = 0
     reviewer_completion_tokens: int = 0
+    # Join keys and explanations
+    tool_call_id: str | None = None      # the model's call id (e.g. call_...), same as in the AgentDojo trace
+    message_index: int = -1              # index of the assistant message in the trace that issued this call
+    decided_by: str = ""                 # "rule:<rule_id>", "semantic", or the policy class name
+    policy_reason: str = ""
+    reviewer_reason: str = ""
+    final_reason: str = ""               # one human-readable reason for the final outcome
 
 
 # ---------------------------------------------------------- token accounting
@@ -127,6 +134,24 @@ def _read_usage(obj: Any) -> tuple[int, int]:
     return p, c
 
 
+def _policy_explanation(policy: Any) -> tuple[str, str]:
+    """(decided_by, reason) for the most recent decide(), from whatever the policy exposes."""
+    rule = getattr(policy, "last_rule_result", None)                      # Member 3's PrefilterPolicy
+    if rule is not None and getattr(rule, "decision", None) is not None:
+        return f"rule:{rule.rule_id}", str(rule.reason)
+    for o in _components(policy)[::-1]:                                   # innermost policy that explains itself
+        if getattr(o, "last_reason", None):
+            return ("semantic" if hasattr(o, "prompt_version") else type(o).__name__), str(o.last_reason)
+    inner = _components(policy)[-1]
+    return ("semantic" if hasattr(inner, "prompt_version") else type(inner).__name__), ""
+
+
+def _clear_reason(obj: Any) -> None:
+    for o in _components(obj):
+        if hasattr(o, "last_reason"):
+            o.last_reason = ""
+
+
 def _new_usage() -> dict[str, dict[str, int]]:
     return {role: {"prompt_tokens": 0, "completion_tokens": 0, "calls": 0}
             for role in ("agent", "policy", "reviewer")}
@@ -147,6 +172,7 @@ class ApprovalGate(ToolsExecutor):
         self.log_path = Path(log_path) if log_path else None
         self.records: list[GateRecord] = []   # records of the CURRENT task
         self.task_meta: dict[str, Any] = {}
+        self._seen_call_ids: set[str] = set()
         self._step = 0
         self.usage = _new_usage()              # token totals of the CURRENT task
         self._task_open = False
@@ -157,6 +183,7 @@ class ApprovalGate(ToolsExecutor):
             self.end_task(completed=False)
         self._task_open = True
         self.usage = _new_usage()
+        self._seen_call_ids = set()
         self.budget.reset()
         self.records = []
         self._step = 0
@@ -174,6 +201,11 @@ class ApprovalGate(ToolsExecutor):
             is_precheck=bool(user_task_id) and str(user_task_id).startswith("injection_task"),
         )
         self.task_meta.update(task_meta)
+        m = self.task_meta
+        # One id per task run; identical in gate_decisions.jsonl and task_summaries.jsonl.
+        m["task_id"] = "/".join(str(x) for x in (
+            m.get("suite"), m.get("user_task_id"), m.get("injection_task_id") or "none",
+            f"run{m.get('run_id', 0)}"))
 
     def add_agent_usage(self, prompt_tokens: int, completion_tokens: int) -> None:
         """Called by run_real.py for every LLM call the AGENT makes."""
@@ -203,6 +235,8 @@ class ApprovalGate(ToolsExecutor):
     def _decide(self, ctx: ToolCallContext) -> tuple[Decision, Outcome, float, float]:
         _clear_usage(self.policy)
         _clear_usage(self.reviewer)
+        _clear_reason(self.policy)
+        _clear_reason(self.reviewer)
         t0 = time.perf_counter()
         decision = Decision(self.policy.decide(ctx))
         policy_ms = (time.perf_counter() - t0) * 1000
@@ -240,6 +274,15 @@ class ApprovalGate(ToolsExecutor):
             )
             budget_before = self.budget.remaining
             decision, outcome, policy_ms, reviewer_ms = self._decide(ctx)
+            decided_by, policy_reason = _policy_explanation(self.policy)
+            reviewer_reason = str(getattr(self.reviewer, "last_reason", "") or "") if reviewer_ms else ""
+            final_reason = {
+                Outcome.AUTO_APPROVED: policy_reason or "auto-approved by policy",
+                Outcome.AUTO_DENIED: policy_reason or "auto-denied by policy",
+                Outcome.HUMAN_APPROVED: reviewer_reason or "approved by reviewer",
+                Outcome.HUMAN_DENIED: reviewer_reason or "denied by reviewer",
+                Outcome.BUDGET_EXHAUSTED_DENIED: f"escalation budget k={self.budget.k} exhausted",
+            }[outcome]
             executed = outcome in (Outcome.AUTO_APPROVED, Outcome.HUMAN_APPROVED)
 
             exec_ms = 0.0
@@ -270,7 +313,10 @@ class ApprovalGate(ToolsExecutor):
                 policy_latency_ms=round(policy_ms, 3), reviewer_latency_ms=round(reviewer_ms, 3),
                 gate_overhead_ms=round(total_ms - policy_ms - reviewer_ms - exec_ms, 3),
                 policy_prompt_tokens=pol_p, policy_completion_tokens=pol_c,
-                reviewer_prompt_tokens=rev_p, reviewer_completion_tokens=rev_c))
+                reviewer_prompt_tokens=rev_p, reviewer_completion_tokens=rev_c,
+                tool_call_id=tool_call.id, message_index=len(messages) - 1,
+                decided_by=decided_by, policy_reason=policy_reason,
+                reviewer_reason=reviewer_reason, final_reason=final_reason))
             self._step += 1
         return query, runtime, env, [*messages, *results], extra_args
 

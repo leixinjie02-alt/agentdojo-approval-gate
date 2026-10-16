@@ -112,6 +112,8 @@ if __name__ == "__main__":
     tag = (f"{a.suite}_{a.attack}_{a.policy}{'_' + a.prompt_version if uses_prompt else ''}"
            f"_{a.reviewer}_k{a.k}_run{a.run_id}")
     logdir = Path(a.logdir) / tag
+    for old in ("gate_decisions.jsonl", "task_summaries.jsonl"):   # re-running a config replaces, not appends
+        (logdir / old).unlink(missing_ok=True)
     pipeline, gate = build_pipeline(a.model, make_policy(a.policy, a.prompt_version),
                                     make_reviewer(a.reviewer, a.model), a.k, logdir / "gate_decisions.jsonl")
     gate.task_meta.update(policy=a.policy, prompt_version=a.prompt_version if uses_prompt else None,

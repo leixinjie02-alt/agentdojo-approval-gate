@@ -11,6 +11,7 @@ MODEL = "openai/gpt-4o-mini"
 
 # Token usage of the most recent assessment, read by SemanticPolicy for cost accounting.
 LAST_USAGE = {}
+LAST_REASON = ""
 log = logging.getLogger(__name__)
 
 
@@ -45,8 +46,9 @@ def semantic_risk_assessment(
         "tool_description": tool_description
     }
 
-    global LAST_USAGE
+    global LAST_USAGE, LAST_REASON
     LAST_USAGE = {}
+    LAST_REASON = ""
     try:
         # 3. Call the LLM
         response = get_client().chat.completions.create(
@@ -84,6 +86,7 @@ def semantic_risk_assessment(
             return "escalate"
         decision = result.get("decision")
         reason = result.get("reason", "")
+        LAST_REASON = str(reason)
 
         # 5. Validate the decision
         valid_decisions = [
@@ -94,12 +97,14 @@ def semantic_risk_assessment(
 
         if decision not in valid_decisions:
             log.warning("Invalid LLM decision: %r", decision)
+            LAST_REASON = f"invalid model decision {decision!r}; fallback escalate"
             return "escalate"
 
         return decision
 
     except Exception as e:
         log.warning("LLM assessment failed (%s); fallback decision: escalate", type(e).__name__)
+        LAST_REASON = f"assessment failed ({type(e).__name__}); fallback escalate"
         return "escalate"
 
 
