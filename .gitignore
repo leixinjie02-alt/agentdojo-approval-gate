@@ -1,3 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+# local scratch outputs (official runs are committed under data/results/runs/)
+/runs/
+/analysis_results/
