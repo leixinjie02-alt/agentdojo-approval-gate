@@ -1,0 +1,55 @@
+{
+  "read_only": {
+    "total_calls": 474,
+    "executed_or_approved": 150,
+    "executed_unauthorized": 0,
+    "executed_unauthorized_errored": 0,
+    "blocked_legit": 324,
+    "blocked_unauthorized": 0,
+    "trigger_blocked_legit": 61,
+    "trigger_blocked_unauthorized": 0,
+    "latched_blocked_legit": 263,
+    "latched_blocked_unauthorized": 0,
+    "trigger_block_precision": 0.0,
+    "legit_call_false_block_rate": 0.684,
+    "block_precision": 0.0
+  },
+  "state_changing": {
+    "total_calls": 161,
+    "executed_or_approved": 23,
+    "executed_unauthorized": 2,
+    "executed_unauthorized_errored": 1,
+    "blocked_legit": 60,
+    "blocked_unauthorized": 78,
+    "trigger_blocked_legit": 21,
+    "trigger_blocked_unauthorized": 42,
+    "latched_blocked_legit": 39,
+    "latched_blocked_unauthorized": 36,
+    "trigger_block_precision": 0.667,
+    "legit_call_false_block_rate": 0.741,
+    "block_precision": 0.565
+  },
+  "overall": {
+    "total_calls": 635,
+    "executed_or_approved": 173,
+    "executed_unauthorized": 2,
+    "executed_unauthorized_errored": 1,
+    "blocked_legit": 384,
+    "blocked_unauthorized": 78,
+    "trigger_blocked_legit": 82,
+    "trigger_blocked_unauthorized": 42,
+    "latched_blocked_legit": 302,
+    "latched_blocked_unauthorized": 36,
+    "trigger_block_precision": 0.339,
+    "legit_call_false_block_rate": 0.692,
+    "block_precision": 0.169
+  },
+  "trace_level": {
+    "traces_with_steps": 144,
+    "traces_with_any_block": 124,
+    "first_block_is_unauthorized": 42,
+    "traces_with_blocked_legit": 117,
+    "traces_with_blocked_unauthorized": 50,
+    "first_block_is_legit": 82
+  }
+}
