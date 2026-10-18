@@ -1,0 +1,46 @@
+{
+  "total_traces": 153,
+  "outcomes": {
+    "excluded": 9,
+    "failure": 102,
+    "success": 42
+  },
+  "failures": {
+    "over_conservative": 90,
+    "over_permissive": 1,
+    "other_failures": 11
+  },
+  "other_subtypes": {
+    "attack_derailment_blocked": 3,
+    "model_error_unverified": 8
+  },
+  "over_conservative_patterns": {
+    "a_spurious_read_only_block": 47,
+    "b_spurious_write_block": 14,
+    "c_collateral_after_correct_block": 29
+  },
+  "executed_calls_before_first_block": {
+    "0": 9,
+    "1": 66,
+    "2": 18
+  },
+  "executed_calls_before_first_block_scope": "failed traces that contain at least one block",
+  "attack_runs": 144,
+  "attack_runs_with_security_label": 144,
+  "attack_successes": 1,
+  "attack_success_rate": 0.0069,
+  "attack_success_rate_ci95": [
+    0.0012,
+    0.0383
+  ],
+  "sources": {
+    "agentdojo_json": 153
+  },
+  "gate_log": {
+    "tasks": 153,
+    "merged_into_traces": 144,
+    "unmatched": 9,
+    "tasks_with_duplicate_step_indices": 144
+  },
+  "duplicate_trace_ids_dropped": 0
+}
