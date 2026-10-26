@@ -16,7 +16,7 @@ from typing import Any, Protocol
 
 from agentdojo.agent_pipeline import BasePipelineElement, ToolsExecutor
 from agentdojo.functions_runtime import EmptyEnv, Env, FunctionCall, FunctionsRuntime
-from agentdojo.logging import Logger
+from agentdojo.logging import Logger, TraceLogger
 from agentdojo.types import ChatMessage, ChatToolResultMessage, text_content_block_from_string
 
 
@@ -173,14 +173,29 @@ class ApprovalGate(ToolsExecutor):
         self.records: list[GateRecord] = []   # records of the CURRENT task
         self.task_meta: dict[str, Any] = {}
         self._seen_call_ids: set[str] = set()
+        self._task_logger: Any = None          # AgentDojo's per-task TraceLogger of the current task
+        self._attempt = 0
+        self._last_summary_offset: int | None = None
         self._step = 0
         self.usage = _new_usage()              # token totals of the CURRENT task
         self._task_open = False
 
     # called once at the start of every task (by BudgetReset below)
     def start_task(self, **task_meta: Any) -> None:
+        # AgentDojo re-runs the SAME task (up to 3 attempts, same TraceLogger, same environment) when
+        # the agent gives no final answer, e.g. after hitting the 15-iteration limit. The budget k is
+        # per task, so a retry must NOT refill it: continue the task instead of starting a new one.
+        lg = Logger.get()
+        if isinstance(lg, TraceLogger) and lg is self._task_logger and not task_meta:
+            self._attempt += 1
+            self.task_meta["attempt"] = self._attempt
+            self._task_open = True
+            return
+        self._task_logger = lg if isinstance(lg, TraceLogger) else None
+        self._attempt = 1
         if self._task_open:                    # previous task ended abnormally (e.g. API error)
             self.end_task(completed=False)
+        self._last_summary_offset = None
         self._task_open = True
         self.usage = _new_usage()
         self._seen_call_ids = set()
@@ -201,6 +216,7 @@ class ApprovalGate(ToolsExecutor):
             is_precheck=bool(user_task_id) and str(user_task_id).startswith("injection_task"),
         )
         self.task_meta.update(task_meta)
+        self.task_meta["attempt"] = 1
         m = self.task_meta
         # One id per task run; identical in gate_decisions.jsonl and task_summaries.jsonl.
         m["task_id"] = "/".join(str(x) for x in (
@@ -227,10 +243,15 @@ class ApprovalGate(ToolsExecutor):
                "n_escalations": sum(o in ("human_approved", "human_denied") for o in outcomes),
                "n_budget_exhausted_denied": outcomes.count("budget_exhausted_denied"),
                "usage": self.usage}
+        row["n_attempts"] = self._attempt
         path = self.log_path.with_name("task_summaries.jsonl")
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a") as f:
-            f.write(json.dumps(row, default=str) + "\n")
+        with path.open("a+b") as f:
+            if self._last_summary_offset is not None:      # retry of the same task: replace its line
+                f.truncate(self._last_summary_offset)
+            f.seek(0, 2)
+            self._last_summary_offset = f.tell()
+            f.write((json.dumps(row, default=str) + "\n").encode())
 
     def _decide(self, ctx: ToolCallContext) -> tuple[Decision, Outcome, float, float]:
         _clear_usage(self.policy)

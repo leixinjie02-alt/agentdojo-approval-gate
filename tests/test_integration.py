@@ -97,7 +97,7 @@ def test_token_accounting_end_to_end(tmp_path, monkeypatch):
     """Agent, policy and reviewer tokens all reach the logs, through the real run_real.py pipeline."""
     monkeypatch.setenv("OPENROUTER_API_KEY", "offline-test")
     import semantic_policy
-    from agentdojo.functions_runtime import FunctionCall
+    from agentdojo.functions_runtime import EmptyEnv, FunctionCall
     from agentdojo.task_suite import get_suite
 
     def completion(content=None, tool_calls=None, p=0, c=0):
@@ -210,3 +210,48 @@ def test_log_join_keys_and_reasons(tmp_path, monkeypatch):
     assert c["final_reason"] == "escalation budget k=1 exhausted"
     summ = json.loads((tmp_path / "task_summaries.jsonl").read_text().splitlines()[0])
     assert {r["task_id"] for r in rows} == {summ["task_id"]} == {"workspace/None/none/run3"}
+
+
+def test_agentdojo_retry_does_not_refill_budget(tmp_path):
+    """AgentDojo re-runs a task (up to 3 attempts) when the agent never gives a final answer.
+    The per-task budget k must carry over across those attempts, and the task gets ONE summary row."""
+    import itertools
+    from agentdojo.agent_pipeline import AgentPipeline, InitQuery, SystemMessage, ToolsExecutionLoop
+    from agentdojo.functions_runtime import EmptyEnv, FunctionCall
+    from agentdojo.logging import NullLogger, TraceLogger
+    from approval_gate import AlwaysApproveReviewer, ApprovalGate, BudgetReset, FullEscalatePolicy, TaskEnd
+    from test_gate import ScriptedLLM
+
+    suite = get_suite("v1.2", "banking")
+    task = suite.user_tasks["user_task_1"]
+    calls = (FunctionCall(function="get_balance", args={}, id=f"call_{i}") for i in itertools.count())
+
+    class EndlessLLM(ScriptedLLM):            # always asks for another tool call -> no final answer
+        def query(self, query, runtime, env=EmptyEnv(), messages=[], extra_args={}):
+            self.calls = [next(calls)]; self.i = 0
+            q, r, e, msgs, x = super().query(query, runtime, env, messages, extra_args)
+            msgs[-1]["content"] = None         # like a real model: tool calls only, no answer text
+            return q, r, e, msgs, x
+
+    log = tmp_path / "gate_decisions.jsonl"
+    gate = ApprovalGate(FullEscalatePolicy(), AlwaysApproveReviewer(), k=2, log_path=log)
+    llm = EndlessLLM([])
+    pipe = AgentPipeline([BudgetReset(gate), SystemMessage("sys"), InitQuery(), llm,
+                          ToolsExecutionLoop([gate, llm]), TaskEnd(gate)])
+    pipe.name = "fake"
+    null = NullLogger(); null.logdir = str(tmp_path / "trace")
+    for _ in range(2):                         # two different tasks, each retried by AgentDojo
+        with TraceLogger(delegate=null, suite_name="banking", user_task_id="user_task_1",
+                         injection_task_id=None, injections={}, attack_type="none", pipeline_name="fake"):
+            suite.run_task_with_pipeline(pipe, task, injection_task=None, injections={})
+
+    rows = [json.loads(l) for l in log.read_text().splitlines()]
+    summaries = [json.loads(l) for l in (tmp_path / "task_summaries.jsonl").read_text().splitlines()]
+    assert len(summaries) == 2 and all(s["n_attempts"] == 3 for s in summaries)
+    per_task = len(rows) // 2
+    for t in (rows[:per_task], rows[per_task:]):
+        assert sorted({r["attempt"] for r in t}) == [1, 2, 3]
+        assert sum(r["outcome"].startswith("human_") for r in t) == 2        # k=2 across ALL attempts
+        assert [r["step_index"] for r in t] == list(range(len(t)))           # unique within the task
+        assert t[0]["budget_before"] == 2 and all(r["budget_before"] == 0 for r in t[2:])
+    assert all(s["n_escalations"] == 2 and s["n_tool_calls"] == per_task for s in summaries)

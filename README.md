@@ -81,7 +81,7 @@ python scripts/run_real.py --policy rules_semantic --k 2 --suite workspace --use
 Each run writes `data/results/runs/<suite>_<attack>_<policy>_..._k<k>_run<id>/`, which contains:
 
 - **`gate_decisions.jsonl`**: one row per tool call. Fields:
-  - `task_id`, and `tool_call_id`, which matches `call_...` in the trace
+  - `task_id`, `attempt` (AgentDojo may retry a task; the budget carries over), and `tool_call_id`, which matches `call_...` in the trace
   - `step_index`, `message_index`
   - `policy_decision`, `outcome`: `auto_approved`, `auto_denied`, `human_approved`, `human_denied` or `budget_exhausted_denied`
   - `budget_before` / `budget_after`
@@ -113,4 +113,4 @@ python scripts/analyze_results.py                          # Member 4's prompt-s
 | 5 · lokziqi1018-prog | Experiment sweeps, TCR@k and cost tracking | `scripts/sweep_runner.py`, `src/utils/cost_tracker.py` |
 | 6 · J-Adrian-Ma | Trajectory parsing & failure classification | `scripts/analysis_toolkit.py`, `data/results/analysis/` |
 
-More detail: `docs/integration_guide.md` and `docs/member_reports/`.
+More detail: `docs/integration_guide.md` and `docs/member_reports/` (e.g. `member1_gateway_architecture.md` for the gate and budget design).
