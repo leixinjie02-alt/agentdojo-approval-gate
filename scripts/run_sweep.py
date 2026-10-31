@@ -21,6 +21,12 @@ from summarize_runs import summarise
 KS = [0, 1, 2, 3, 5]
 
 
+def finished(runs_dir, t):
+    """A run counts as done only if run_real.py got to the end (it prints a 'task completed' line)."""
+    log = runs_dir / f"{t}.log"
+    return log.exists() and "task completed (utility)" in log.read_text(encoding="utf-8", errors="replace")
+
+
 def configs(suite, prompt_version):
     yield dict(policy="full_approve", k=0)                       # no escalations, so k does not matter
     for k in KS:
@@ -51,7 +57,7 @@ def main():
     todo = []
     for c in configs(a.suite, a.prompt_version):
         t = tag(c, a.suite, a.attack, a.reviewer, a.run_id)
-        done = (runs_dir / t / "task_summaries.jsonl").exists()
+        done = finished(runs_dir, t)
         cmd = [sys.executable, str(_paths.ROOT / "scripts" / "run_real.py"), "--policy", c["policy"], "--k", str(c["k"]),
                "--suite", a.suite, "--attack", a.attack, "--reviewer", a.reviewer, "--run-id", str(a.run_id)]
         if c.get("prompt_version"):
@@ -74,10 +80,15 @@ def main():
 
     runs_dir.mkdir(parents=True, exist_ok=True)
 
-    def run_one(t, cmd):
+    def run_one(t, cmd, tries=3):
         start = time.time()
-        with open(runs_dir / f"{t}.log", "w", encoding="utf-8") as log:
-            rc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=_paths.ROOT).returncode
+        for attempt in range(1, tries + 1):          # network errors stop a whole run, so retry it
+            with open(runs_dir / f"{t}.log", "w", encoding="utf-8") as log:
+                rc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=_paths.ROOT).returncode
+            if rc == 0 or attempt == tries:
+                break
+            print(f"retry  {t}  (attempt {attempt} failed; waiting 60 s, see its .log)")
+            time.sleep(60)
         return t, rc, time.time() - start
 
     print(f"\nStarting {len(todo)} runs, {a.parallel} at a time. Progress is written to data/results/runs/<run>.log\n")

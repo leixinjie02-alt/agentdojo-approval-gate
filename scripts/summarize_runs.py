@@ -39,6 +39,10 @@ def _summaries(run_dir: Path):
 def summarise(runs_dir: Path):
     table = []
     for run_dir in sorted(d for d in Path(runs_dir).iterdir() if d.is_dir()):
+        log = run_dir.parent / f"{run_dir.name}.log"
+        if log.exists() and "task completed (utility)" not in log.read_text(encoding="utf-8", errors="replace"):
+            print(f"skipped (run did not finish): {run_dir.name}")
+            continue
         summ = _summaries(run_dir)
         traces = _attacked_traces(run_dir)
         if not summ:
