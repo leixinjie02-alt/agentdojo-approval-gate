@@ -92,6 +92,16 @@ Each run writes `data/results/runs/<suite>_<attack>_<policy>_..._k<k>_run<id>/`,
 
 Rows with `is_precheck = true` come from AgentDojo running each injection task on its own as a sanity check. They are not benchmark results, so filter them out.
 
+## Main experiment (TCR@k sweep)
+
+```bash
+python scripts/run_sweep.py --dry-run     # list the 11 runs: full_approve, full_escalate and rules_semantic (V1) at k = 0,1,2,3,5
+python scripts/run_sweep.py               # run what is missing, 3 at a time, then print the results table
+python scripts/summarize_runs.py          # rebuild the table (TCR, attack success, HITL load, cost) -> data/results/sweep_summary.csv
+```
+
+Runs made with the reviewer prompt from before PR #3 are kept in `data/results/archive/` and are not part of the sweep.
+
 ## Analyse results
 
 ```bash
