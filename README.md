@@ -128,7 +128,7 @@ Group A1.
 | 2 | Zhang Yushuang | G2606425H | YUSHUANG001@e.ntu.edu.sg | zhangyushuang001 | Simulated reviewer & full-escalate baseline | `src/adapters/simulated_reviewer.py` |
 | 3 | Cheng Hao | G2606471K | P260013@e.ntu.edu.sg | finnhao9384-max | Rule-based pre-filter & full-approve baseline | `src/gate/rule_prefilter.py`, `src/gate/prefilter_policy.py`, `src/utils/tool_metadata.py`, `src/rules/` |
 | 4 | Yang Yisheng | G2604043G | YISHENG005@e.ntu.edu.sg | 18310048236yys-byte | Semantic (LLM) approval policy | `src/gate/semantic_policy.py`, `src/adapters/semantic_adapter.py`, `src/utils/prompts.py` |
-| 5 | Luo Ziqi | G2602544H | – | lokziqi1018-prog | Experiment sweeps, TCR@k and cost tracking | `scripts/sweep_runner.py`, `src/utils/cost_tracker.py` |
+| 5 | Luo Ziqi | G2602544H | ZIQI014@e.ntu.edu.sg | lokziqi1018-prog | Experiment sweeps, TCR@k and cost tracking | `scripts/sweep_runner.py`, `src/utils/cost_tracker.py` |
 | 6 | Ma Jian | G2606495E | jian011@e.ntu.edu.sg | J-Adrian-Ma | Trajectory parsing & failure classification | `scripts/analysis_toolkit.py`, `data/results/analysis/` |
 
 More detail: `docs/integration_guide.md` and `docs/member_reports/` (e.g. `member1_gateway_architecture.md` for the gate and budget design).
