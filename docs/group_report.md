@@ -4,14 +4,14 @@
 
 Instructor: Prof. Bo An (CCDS, NTU)
 
-| Member | Name | Matric no. | Responsibility |
-|---|---|---|---|
-| 1 | Lei Xinjie | G2606932C | Approval gate, budget controller, AgentDojo integration, logging, experiment runner |
-| 2 | Zhang Yushuang | G2606425H | Simulated human reviewer, full-escalate baseline |
-| 3 | Cheng Hao | G2606471K | Rule-based pre-filter, tool metadata, full-approve baseline |
-| 4 | Yang Yisheng | G2604043G | Semantic (LLM) approval policy and prompt selection |
-| 5 | Luo Ziqi | G2602544H | Experiment sweeps, TCR@k and cost tracking |
-| 6 | Ma Jian | G2606495E | Trajectory parsing, failure classification, escalation-value analysis |
+| Member | Name | Matric no. | NTU email | Responsibility |
+|---|---|---|---|---|
+| 1 | Lei Xinjie | G2606932C | LEIX0006@e.ntu.edu.sg | Approval gate, budget controller, AgentDojo integration, logging, experiment runner |
+| 2 | Zhang Yushuang | G2606425H | YUSHUANG001@e.ntu.edu.sg | Simulated human reviewer, full-escalate baseline |
+| 3 | Cheng Hao | G2606471K | P260013@e.ntu.edu.sg | Rule-based pre-filter, tool metadata, full-approve baseline |
+| 4 | Yang Yisheng | G2604043G | YISHENG005@e.ntu.edu.sg | Semantic (LLM) approval policy and prompt selection |
+| 5 | Luo Ziqi | G2602544H | – | Experiment sweeps, TCR@k and cost tracking |
+| 6 | Ma Jian | G2606495E | jian011@e.ntu.edu.sg | Trajectory parsing, failure classification, escalation-value analysis |
 
 Code, logs and traces: <https://github.com/leixinjie02-alt/agentdojo-approval-gate>. Detailed component write-ups are in `docs/member_reports/`.
 

@@ -120,13 +120,15 @@ python scripts/analyze_results.py                          # Member 4's prompt-s
 
 ## Team
 
-| Member | Responsibility | Main files |
-|---|---|---|
-| 1 · leixinjie02-alt | Gate interceptor & budget manager, AgentDojo integration, logging | `src/gate/approval_gate.py`, `scripts/run_real.py`, `src/utils/cost_report.py` |
-| 2 · zhangyushuang001 | Simulated reviewer & full-escalate baseline | `src/adapters/simulated_reviewer.py` |
-| 3 · finnhao9384-max | Rule-based pre-filter & full-approve baseline | `src/gate/rule_prefilter.py`, `src/gate/prefilter_policy.py`, `src/utils/tool_metadata.py`, `src/rules/` |
-| 4 · 18310048236yys-byte | Semantic (LLM) approval policy | `src/gate/semantic_policy.py`, `src/adapters/semantic_adapter.py`, `src/utils/prompts.py` |
-| 5 · lokziqi1018-prog | Experiment sweeps, TCR@k and cost tracking | `scripts/sweep_runner.py`, `src/utils/cost_tracker.py` |
-| 6 · J-Adrian-Ma | Trajectory parsing & failure classification | `scripts/analysis_toolkit.py`, `data/results/analysis/` |
+Group A1.
+
+| Member | Name | Matric no. | NTU email | GitHub | Responsibility | Main files |
+|---|---|---|---|---|---|---|
+| 1 | Lei Xinjie | G2606932C | LEIX0006@e.ntu.edu.sg | leixinjie02-alt | Gate interceptor & budget manager, AgentDojo integration, logging | `src/gate/approval_gate.py`, `scripts/run_real.py`, `src/utils/cost_report.py` |
+| 2 | Zhang Yushuang | G2606425H | YUSHUANG001@e.ntu.edu.sg | zhangyushuang001 | Simulated reviewer & full-escalate baseline | `src/adapters/simulated_reviewer.py` |
+| 3 | Cheng Hao | G2606471K | P260013@e.ntu.edu.sg | finnhao9384-max | Rule-based pre-filter & full-approve baseline | `src/gate/rule_prefilter.py`, `src/gate/prefilter_policy.py`, `src/utils/tool_metadata.py`, `src/rules/` |
+| 4 | Yang Yisheng | G2604043G | YISHENG005@e.ntu.edu.sg | 18310048236yys-byte | Semantic (LLM) approval policy | `src/gate/semantic_policy.py`, `src/adapters/semantic_adapter.py`, `src/utils/prompts.py` |
+| 5 | Luo Ziqi | G2602544H | – | lokziqi1018-prog | Experiment sweeps, TCR@k and cost tracking | `scripts/sweep_runner.py`, `src/utils/cost_tracker.py` |
+| 6 | Ma Jian | G2606495E | jian011@e.ntu.edu.sg | J-Adrian-Ma | Trajectory parsing & failure classification | `scripts/analysis_toolkit.py`, `data/results/analysis/` |
 
 More detail: `docs/integration_guide.md` and `docs/member_reports/` (e.g. `member1_gateway_architecture.md` for the gate and budget design).
