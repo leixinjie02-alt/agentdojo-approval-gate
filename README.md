@@ -25,8 +25,9 @@ We report the safe task completion rate as a function of the budget (**TCR@k**),
 │   └── utils/              # tool_metadata.py, prompts.py, cost_tracker.py, cost_report.py
 ├── tests/                  # all tests (offline, no API key needed)
 ├── scripts/                # run_real.py, run_experiments.py, sweep_runner.py, analysis_toolkit.py,
-│                           # analyze_results.py, evaluate_reference_coverage.py
-├── docs/                   # integration_guide.md, member_reports/
+│                           # analyze_results.py, evaluate_reference_coverage.py, run_sweep.py, summarize_runs.py,
+│                           # plot_results.py, failure_analysis.py
+├── docs/                   # group_report.md (+ PDF), integration_guide.md, member_reports/
 └── data/
     ├── raw/
     └── results/            # runs/ (experiment logs + AgentDojo traces), analysis/, member4/, ...
@@ -98,7 +99,11 @@ Rows with `is_precheck = true` come from AgentDojo running each injection task o
 python scripts/run_sweep.py --dry-run     # list the 11 runs: full_approve, full_escalate and rules_semantic (V1) at k = 0,1,2,3,5
 python scripts/run_sweep.py               # run what is missing, 3 at a time, then print the results table
 python scripts/summarize_runs.py          # rebuild the table (TCR, attack success, HITL load, cost) -> data/results/sweep_summary.csv
+python scripts/plot_results.py            # TCR@k curves, HITL and cost figures + Markdown tables -> data/results/figures/
+python scripts/failure_analysis.py        # failure classes, representative trajectories, escalation value -> data/results/analysis/
 ```
+
+The results of the full sweep (Banking, `important_instructions`, gpt-4o-mini, 11 runs) are committed in `data/results/runs/`, and the group report is `docs/group_report.md` (PDF: `docs/group_report.pdf`).
 
 Runs made with the reviewer prompt from before PR #3 are kept in `data/results/archive/` and are not part of the sweep.
 
@@ -106,7 +111,8 @@ Runs made with the reviewer prompt from before PR #3 are kept in `data/results/a
 
 ```bash
 python src/utils/cost_report.py data/results/runs/*      # cost per component (Member 5's CostTracker)
-python scripts/analysis_toolkit.py                         # failure classes, escalation value (Member 6)
+python scripts/failure_analysis.py                         # failure classes from the gate logs, trajectories, escalation value
+python scripts/analysis_toolkit.py                         # Member 6's trace-based analysis
 python scripts/analyze_results.py                          # Member 4's prompt-selection analysis
 ```
 

@@ -5,6 +5,7 @@
 
 Writes to data/results/figures/:
   tcr_at_k.png          TCR@k for our policy and both baselines (95% Wilson intervals)
+  tcr_action_at_k.png   the same on the tasks that need the agent to act (see summarize_runs.py)
   asr_at_k.png          attack success rate against k
   hitl_at_k.png         human escalations per task against k
   cost_by_component.png API cost per component (agent / policy / reviewer) for each run
@@ -47,9 +48,10 @@ def load(path):
     rows = []
     with open(path, encoding="utf-8") as f:
         for r in csv.DictReader(f):
-            for key in ("k", "attacked_runs", "safe_completed", "HITL_load_completed_tasks", "HITL_load_all_tasks"):
+            for key in ("k", "attacked_runs", "safe_completed", "HITL_load_completed_tasks", "HITL_load_all_tasks",
+                        "action_task_runs", "safe_completed_action_tasks"):
                 r[key] = int(r[key])
-            for key in ("TCR", "attack_success_rate", "cost_agent_usd", "cost_policy_usd",
+            for key in ("TCR", "TCR_action_tasks", "attack_success_rate", "cost_agent_usd", "cost_policy_usd",
                         "cost_reviewer_usd", "cost_total_usd"):
                 r[key] = float(r[key])
             rows.append(r)
@@ -73,6 +75,10 @@ def _k_axis(ax, ks, ylabel):
     ax.legend(frameon=False, fontsize=9)
 
 
+CI_COUNTS = {"TCR": ("safe_completed", "attacked_runs"),
+             "TCR_action_tasks": ("safe_completed_action_tasks", "action_task_runs")}
+
+
 def line_plot(groups, ks, metric, ylabel, out, ci=False):
     fig, ax = plt.subplots(figsize=(6.4, 4))
     for pol, rs in groups.items():
@@ -81,14 +87,16 @@ def line_plot(groups, ks, metric, ylabel, out, ci=False):
             v = rs[0][metric]
             ax.axhline(v, color=c, ls="--", label=f"{LABELS[pol]} = {v:.3f}")
             if ci:
-                lo, hi = wilson(rs[0]["safe_completed"], rs[0]["attacked_runs"])
+                num, den = CI_COUNTS[metric]
+                lo, hi = wilson(rs[0][num], rs[0][den])
                 ax.axhspan(lo, hi, color=c, alpha=0.12)
             continue
         x = [r["k"] for r in rs]
         y = [r[metric] for r in rs]
         ax.plot(x, y, marker="o", color=c, label=LABELS.get(pol, pol))
         if ci:
-            b = [wilson(r["safe_completed"], r["attacked_runs"]) for r in rs]
+            num, den = CI_COUNTS[metric]
+            b = [wilson(r[num], r[den]) for r in rs]
             ax.fill_between(x, [lo for lo, _ in b], [hi for _, hi in b], color=c, alpha=0.15)
     if metric != "hitl":
         ax.set_ylim(bottom=0)
@@ -123,15 +131,17 @@ def cost_plot(groups, out):
 
 def tables(groups):
     lines = ["## TCR@k, attack success and HITL load", "",
-             "| Policy | k | Attacked runs | Safe completions | TCR@k (95% CI) | Attack success | "
+             "| Policy | k | Attacked runs | Safe completions | TCR@k (95% CI) | TCR@k, action tasks (95% CI) | Attack success | "
              "Escalations, all tasks | Escalations per task | Escalations in safely completed tasks |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             "|---|---|---|---|---|---|---|---|---|---|"]
     for pol, rs in groups.items():
         for r in rs:
             lo, hi = wilson(r["safe_completed"], r["attacked_runs"])
             n = r["attacked_runs"] or 1
+            alo, ahi = wilson(r["safe_completed_action_tasks"], r["action_task_runs"])
             lines.append(f"| {LABELS.get(pol, pol)} | {r['k'] if pol != 'full_approve' else '–'} | {r['attacked_runs']} | "
-                         f"{r['safe_completed']} | {r['TCR']:.3f} ({lo:.3f}–{hi:.3f}) | {r['attack_success_rate']:.3f} | "
+                         f"{r['safe_completed']} | {r['TCR']:.3f} ({lo:.3f}–{hi:.3f}) | "
+                         f"{r['TCR_action_tasks']:.3f} ({alo:.3f}–{ahi:.3f}) | {r['attack_success_rate']:.3f} | "
                          f"{r['HITL_load_all_tasks']} | {r['HITL_load_all_tasks'] / n:.2f} | "
                          f"{r['HITL_load_completed_tasks']} |")
     lines += ["", "## API cost per component (USD per run)", "",
@@ -158,6 +168,8 @@ def main():
     out = Path(_paths.RESULTS_DIR / "figures")
     out.mkdir(parents=True, exist_ok=True)
     line_plot(groups, ks, "TCR", "TCR@k (safe task completion rate)", out / "tcr_at_k.png", ci=True)
+    line_plot(groups, ks, "TCR_action_tasks", "TCR@k on the 12 tasks that need an action",
+              out / "tcr_action_at_k.png", ci=True)
     line_plot(groups, ks, "attack_success_rate", "Attack success rate", out / "asr_at_k.png")
     line_plot({p: v for p, v in groups.items() if p != "full_approve"}, ks, "hitl",
               "Human escalations per task", out / "hitl_at_k.png")
